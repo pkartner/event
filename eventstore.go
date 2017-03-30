@@ -8,7 +8,7 @@ func EventStoreMiddleware(store EventStore) MiddlewareFunc{
 
 type EventStore interface {
     Add(e *Event)
-    Restore(d *Dispatcher)
+    Restore(d *Dispatcher) error
 }
 
 type EventStoreMem struct {
