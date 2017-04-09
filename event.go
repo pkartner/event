@@ -9,7 +9,7 @@ type ID [16]byte
 
 type Event struct {
     ID ID
-    BranchID ID
+    StoreID ID
     Type string
     Time uint64
     Attributes interface{}
@@ -75,7 +75,7 @@ type HandlerFunc func(event *Event, store *Store)
 
 type Store struct {
     ID ID
-    Time int
+    Time uint64
     Branch *Branch
     Attributes interface{}
 }
@@ -88,20 +88,3 @@ func NewStore(id ID, store interface{}) *Store {
     }
 }
 
-type Branch struct {
-    CreationTime int 
-    BranchID int 
-    PreviousBranch *Branch
-    PreviousBranchLastEventId ID
-    StoreID ID
-}
-
-func (b *Branch) NewBranch(time int, previousBranchLastEventId ID, store* Store) *Branch {
-    return &Branch{
-        CreationTime: time, 
-        BranchID: 0,
-        PreviousBranch: b,
-        PreviousBranchLastEventId: previousBranchLastEventId,
-        StoreID: store.ID,
-    }
-}

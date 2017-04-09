@@ -5,7 +5,7 @@ import (
 )
 
 
-func Generate(time uint64, id uint64) ID {
+func GenerateTimeID(time uint64, id uint64) ID {
 	var firstPart, secondPart []byte
 	
 	binary.LittleEndian.PutUint64(firstPart, time)

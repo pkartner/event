@@ -28,7 +28,7 @@ func GetInnerStore(s *event.Store) *Store {
     return store
 } 
 
-func IncreaseCounter(timeline event.ID, amount int) *event.Event {
+func IncreaseCounter(timeline event.ID, amount int, id event.ID) *event.Event {
     return &event.Event{
         Attributes: &IncreaseCounterEvent{
             Amount: amount,
@@ -40,7 +40,7 @@ func IncreaseCounter(timeline event.ID, amount int) *event.Event {
     }
 }
 
-func DecreaseCounter(timeline event.ID, amount int) *event.Event {
+func DecreaseCounter(timeline event.ID, amount int, id event.ID) *event.Event {
     return &event.Event{
         Attributes: &DecreaseCounterEvent{
             Amount: amount,
@@ -94,22 +94,26 @@ func main() {
     dispatcher.SetMiddleware(
         event.EventStoreMiddleware(eventStore),
     )
+    id1 := event.GenerateTimeID(0, 0)
+    id2 := event.GenerateTimeID(0, 1)
+    id3 := event.GenerateTimeID(1, 0)
     dispatcher.SetHandler("increase_counter", &IncreaseCounterEvent{}, IncreaseCounterHandler)
     dispatcher.SetHandler("decrease_counter", &DecreaseCounterEvent{}, DecreaseCounterHandler)
 
     //eventStore.Restore(dispatcher)
 
-    // Dispatch(dispatcher, IncreaseCounter(store.ID, 2))
-    // Dispatch(dispatcher, DecreaseCounter(store.ID, 3))
-    // if err := stateStore.Write(store); nil != err {
-    //     panic(err)
-    // } 
-    
-    restored, err := stateStore.Restore()
-    if nil != err {
+    Dispatch(dispatcher, IncreaseCounter(store.ID, 2, id1))
+    Dispatch(dispatcher, IncreaseCounter(store.ID, 1, id2))
+    Dispatch(dispatcher, DecreaseCounter(store.ID, 3, id3))
+    if err := stateStore.Write(store); nil != err {
         panic(err)
-    }
-    innerStore = restored.Attributes.(*Store)
+    } 
+    
+    // restored, err := stateStore.Restore()
+    // if nil != err {
+    //     panic(err)
+    // }
+    // innerStore = restored.Attributes.(*Store)
 
     fmt.Println(innerStore.Counter)
 }
