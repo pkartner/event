@@ -79,6 +79,7 @@ func Dispatch(d *event.Dispatcher, e *event.Event) {
 }
 
 func main() {
+    timeIDGenerator := &event.TimeIDGenerator{}
     innerStore := &Store{}
     store := event.NewStore("0", innerStore)
     db, err := bolt.Open("event.db", 0600, nil)

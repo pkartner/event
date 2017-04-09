@@ -5,14 +5,14 @@ import (
     "encoding/gob"
 )
 
-type ID string
+type ID [16]byte
 
 type Event struct {
-    ID ID `json:"id"`
-    TimeLineID ID `json:"time_line_id"`
-    Type string `json:"type"`
-    Time int `json:"time"`
-    Attributes interface{} `json:"attributes"`
+    ID ID
+    BranchID ID
+    Type string
+    Time uint64
+    Attributes interface{}
 }
 
 type Dispatcher struct {
@@ -46,9 +46,9 @@ func (d *Dispatcher) SetHandler(eventType string, event interface{}, handler Han
 
 // Handle should not be called externally, use Dispatch instead, this function gives the possibility to avoid the middleware
 func (d *Dispatcher) Handle(event *Event) error{
-    store, ok := d.Stores[event.TimeLineID]
+    store, ok := d.Stores[event.BranchID]
     if !ok {
-        return fmt.Errorf("Timeline with ID: %s is unknown", event.TimeLineID)
+        return fmt.Errorf("Timeline with ID: %s is unknown", event.BranchID)
     }
     handler, ok := d.Handlers[event.Type]
     if !ok {
@@ -75,7 +75,8 @@ type HandlerFunc func(event *Event, store *Store)
 
 type Store struct {
     ID ID
-    Time int 
+    Time int
+    Branch *Branch
     Attributes interface{}
 }
 
@@ -84,5 +85,23 @@ func NewStore(id ID, store interface{}) *Store {
     gob.Register(store)
     return &Store {
         Attributes: store,
+    }
+}
+
+type Branch struct {
+    CreationTime int 
+    BranchID int 
+    PreviousBranch *Branch
+    PreviousBranchLastEventId ID
+    StoreID ID
+}
+
+func (b *Branch) NewBranch(time int, previousBranchLastEventId ID, store* Store) *Branch {
+    return &Branch{
+        CreationTime: time, 
+        BranchID: 0,
+        PreviousBranch: b,
+        PreviousBranchLastEventId: previousBranchLastEventId,
+        StoreID: store.ID,
     }
 }
