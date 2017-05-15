@@ -2,52 +2,57 @@ package event
 
 import(
     "encoding/binary"
+    "fmt"
     "bytes"
     "encoding/gob"
 
     "github.com/boltdb/bolt"
 )
 
+// EventBucket TODO
 const EventBucket = "event"
 
+// BoltEventStore TODO
 type BoltEventStore struct {
     db *bolt.DB
-    events chan *Event
+    events chan Event
 } 
 
+// NewBoltEventStore TODO
 func NewBoltEventStore(db *bolt.DB) *BoltEventStore {
     boltEventStore := &BoltEventStore{
-        events: make(chan *Event),
+        events: make(chan Event),
         db: db,
     }
 
     go func() {
         for {
             event := <- boltEventStore.events
-            var buffer  bytes.Buffer
-            enc := gob.NewEncoder(&buffer)
-            if err := enc.Encode(event); nil != err {
-                return 
+            buffer := new(bytes.Buffer)
+            enc := gob.NewEncoder(buffer)
+            if err := enc.Encode(&event); nil != err {
+                panic(err)
+                return
             }
-            db.Update(func(tx *bolt.Tx) error {
+            err := db.Update(func(tx *bolt.Tx) error {
                 b, err := tx.CreateBucketIfNotExists([]byte(EventBucket))
                 if nil != err {
                     return err
                 }
-                id, err := b.NextSequence()
-                if nil != err {
-                    return err
-                }
-                b.Put(itob(int(id)), buffer.Bytes())
+                b.Put(event.ID().Byte(), buffer.Bytes())
                 return nil
             })
+            if nil != err {
+                panic(err)
+            }
         }
     }()
 
     return boltEventStore
 }
 
-func (s *BoltEventStore) Add(e *Event) {
+// Add TODO
+func (s *BoltEventStore) Add(e Event) {
     s.events <- e
 }
 
@@ -57,27 +62,36 @@ func itob(v int) []byte {
     return b
 }
 
-func (s *BoltEventStore) Restore(d *Dispatcher) error {
-    err := s.db.View(func(tx *bolt.Tx) error {
+// Restore TODO
+func (s *BoltEventStore) Restore(time uint64, handleFunc ReadEventHandleFunc) error {
+
+   err := s.db.View(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(EventBucket))
+        if b == nil {
+            return fmt.Errorf("Bucket %q not found!", EventBucket)
+        }
         c := b.Cursor()
 
         var event Event
     
         for k, v := c.First(); k != nil; k, v = c.Next() {
-            var buffer bytes.Buffer
-            dec := gob.NewDecoder(&buffer)
-            buffer = *bytes.NewBuffer(v)
+            buffer := bytes.NewBuffer(v)
+            dec := gob.NewDecoder(buffer)
             err := dec.Decode(&event)
             if nil != err {
                 return err
             }
-            d.Handle(&event)
+            if event == nil {
+                panic(fmt.Errorf("event is nil"))
+            }
+            if event.Time() > time {
+                return nil
+            }
+            if err := handleFunc(event); nil != err {
+                return err
+            } 
         }
         return nil
     })
-    if nil != err {
-        return err
-    }
-    return nil
+    return err
 }
