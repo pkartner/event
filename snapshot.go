@@ -7,18 +7,22 @@ import (
     "github.com/boltdb/bolt"
 )
 
+// SnapshotBucket TODO
 const SnapshotBucket = "snapshot"
 
+// BoltSnapshotStore TODO
 type BoltSnapshotStore struct {
     db *bolt.DB
 }
 
+// NewBoltSnapshotStore TODO
 func NewBoltSnapshotStore(db *bolt.DB) *BoltSnapshotStore {
     return &BoltSnapshotStore{
         db: db,
     }
 }
 
+// Write TODO
 func (w *BoltSnapshotStore) Write(s *Store) error {
     var buffer bytes.Buffer
     enc := gob.NewEncoder(&buffer)
@@ -40,6 +44,7 @@ func (w *BoltSnapshotStore) Write(s *Store) error {
     return nil
 }
 
+// Restore TODO
 func (w *BoltSnapshotStore) Restore() (*Store, error) {
     var store Store
     err := w.db.View(func(tx *bolt.Tx) error {
