@@ -68,7 +68,7 @@ func (s *BoltEventStore) Restore(time uint64, handleFunc ReadEventHandleFunc) er
    err := s.db.View(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(EventBucket))
         if b == nil {
-            return fmt.Errorf("Bucket %q not found!", EventBucket)
+            return fmt.Errorf("bucket %q not found", EventBucket)
         }
         c := b.Cursor()
 
@@ -85,7 +85,7 @@ func (s *BoltEventStore) Restore(time uint64, handleFunc ReadEventHandleFunc) er
                 panic(fmt.Errorf("event is nil"))
             }
             if event.Time() > time {
-                return nil
+                continue;
             }
             if err := handleFunc(event); nil != err {
                 return err
