@@ -43,6 +43,12 @@ func (id ID) IDPart() uint64 {
 	return idPart
 }
 
+func (id ID) TimePart() uint64 {
+	byteID := id.Byte()
+	idPart := binary.LittleEndian.Uint64(byteID[:8])
+	return idPart
+}
+
 func FromtString(string) ID {
 	return ID{}
 }

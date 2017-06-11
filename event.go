@@ -23,6 +23,10 @@ func MaxID() ID {
 // EventType TODO
 type EventType string
 
+func (e EventType) String() string {
+    return string(e)
+}
+
 // Event TODO
 type Event interface {
     ID() ID

@@ -14,11 +14,23 @@ type StoreCreator func() BranchStore
 type TimelineStore struct {
 	Stores []Store
 	RewindStores []Store
-	Branches map[ID]Branch
+	Branches []Branch
+	BranchDictionary map[ID]int
 	LastEventID ID
 	Reloader Reloader
 	StoreCreator StoreCreator
 	Attributes interface{}
+}
+
+func (t *TimelineStore) GetBranch(id ID) (*Branch, error) {
+	branchIndex, ok := t.BranchDictionary[id]
+	if !ok {
+		return nil, fmt.Errorf("Unknown branch")
+	}
+	if len(t.Branches) <= branchIndex {
+		return nil, fmt.Errorf("Branchindex %d doesn't exist", branchIndex)
+	}
+	return &t.Branches[branchIndex], nil
 }
 
 // NewTimelineStore TODO
@@ -28,7 +40,7 @@ func NewTimelineStore(storeCreator StoreCreator, reloader Reloader, attributes i
 		gob.Register(attributes)
 	}
 	return &TimelineStore{
-		Branches: make(map[ID]Branch),
+		BranchDictionary: make(map[ID]int),
 		LastEventID: GenerateTimeID(0,0),
 		StoreCreator: storeCreator,
 		Reloader: reloader,
@@ -42,6 +54,7 @@ type NewBranchEvent struct {
 	PrevBranch ID
 	PrevBranchLastEvent ID
 	NewBranchID ID
+	RewindTime uint64
 }
 
 // Type TODO
@@ -50,7 +63,7 @@ func (e *NewBranchEvent) Type() EventType {
 }
 
 // NewBranch TODO
-func NewBranch(prevBranch ID, prevBranchLastEvent ID, currentTime uint64, id uint64) *NewBranchEvent {
+func NewBranch(time uint64, prevBranch ID, prevBranchLastEvent ID, currentTime uint64, id uint64) *NewBranchEvent {
 	randomUUID, _ := uuid.NewRandom()
 	return &NewBranchEvent{
 		PrevBranch: prevBranch, 
@@ -60,6 +73,7 @@ func NewBranch(prevBranch ID, prevBranchLastEvent ID, currentTime uint64, id uin
 			EventID: GenerateTimeID(currentTime, id),
 			EventTime: currentTime,
 		},
+		RewindTime: time,
 	}
 }
 
@@ -85,7 +99,8 @@ func (d* TimelineDispatcher) NewBranchHandler(e Event, s *Store) {
 		PrevBranch: event.PrevBranch,
 		PrevBranchLastEvent: event.PrevBranchLastEvent,
 	}
-	store.Branches[event.NewBranchID] = newBranch
+	store.BranchDictionary[event.NewBranchID] = len(store.Branches)
+	store.Branches = append(store.Branches, newBranch)
 	store.Stores = append(store.Stores, Store{
 		Attributes: store.StoreCreator(),
 	})
@@ -100,10 +115,14 @@ func (d* TimelineDispatcher) NewBranchHandler(e Event, s *Store) {
 			break
 		}
 		prevBranchLastEvent := prevBranch.PrevBranchLastEvent
-		prevBranch, ok = store.Branches[prevBranch.PrevBranch]
+		prevBranchIndex, ok := store.BranchDictionary[prevBranch.PrevBranch]
 		if !ok {
 			break
 		}
+		if len(store.Branches) <= prevBranchIndex {
+			panic(fmt.Errorf("Branchindex %d doesn't exist", prevBranchIndex))
+		}
+		prevBranch = store.Branches[prevBranchIndex]
 
 		branches = append(branches, branchWithEnd{
 			&prevBranch,
@@ -115,7 +134,7 @@ func (d* TimelineDispatcher) NewBranchHandler(e Event, s *Store) {
 	}
 
 	branchIndex := 0
-	err := store.Reloader.EventStore.Restore(^uint64(0), func(e Event) error {
+	err := store.Reloader.EventStore.Restore(event.RewindTime, func(e Event) error {
 		if branchIndex >= len(branches) {
 			return nil
 		}
@@ -181,9 +200,10 @@ func (d* TimelineDispatcher) WindbackHandler(e Event, s *Store) {
 			Attributes: freshStore,
 		}
 	}
+	fmt.Println(fmt.Sprintf("Winding back time to %d", event.WindBackTime))
 
 	err := store.Reloader.EventStore.Restore(event.WindBackTime, func(e Event) error {
-		//fmt.Println("test1")
+		fmt.Println(fmt.Sprintf("Rewinding event with time %d and type %s", e.Time(), e.Type()))
 		event, ok := e.(TimelineEvent)
 		if !ok {
 			return nil
@@ -194,11 +214,10 @@ func (d* TimelineDispatcher) WindbackHandler(e Event, s *Store) {
 		}
 		
 		for _, v := range store.Branches {
-			//fmt.Println("test2")
-			if EventForBranch(store.Branches, &v, event) {
-				fmt.Println(v.BranchID)
-				handler(event, &store.RewindStores[v.StoreID])
-			}	
+			if !EventForBranch(store, &v, event) {
+				continue
+			}
+			handler(event, &store.RewindStores[v.StoreID])
 		}
 		return nil
 	})
@@ -210,7 +229,8 @@ func (d* TimelineDispatcher) WindbackHandler(e Event, s *Store) {
 
 // Branch TODO
 type Branch struct {
-    CreationTime uint64 
+    CreationTime uint64
+	LastEventTime uint64
     BranchID ID 
     StoreID uint
 	PrevBranch ID
@@ -261,10 +281,14 @@ func (d* TimelineDispatcher) TimelineEventHandler(e Event, s *Store) {
         panic(fmt.Errorf("Store not of right type"))
     }
 	event := e.(TimelineEvent)
-	branch, ok := store.Branches[event.Branch()]
+	branchIndex, ok := store.BranchDictionary[event.Branch()]
 	if !ok {
 		panic(fmt.Errorf("Unknown branch"))
 	}
+	if len(store.Branches) <= branchIndex {
+		panic(fmt.Errorf("Branchindex %d doesn't exist", branchIndex))
+	}
+	branch := store.Branches[branchIndex] 
 	handler, ok := d.TimelineRoutes[e.Type()]
 	if !ok {
 		panic(fmt.Errorf("Unknown Event"))
@@ -272,6 +296,13 @@ func (d* TimelineDispatcher) TimelineEventHandler(e Event, s *Store) {
 	branchStore := &store.Stores[branch.StoreID]
 	handler(e, branchStore)
 	branchStore.LastEvent = e
+	eventTime := event.Time()
+	if branch.LastEventTime > eventTime {
+		return
+	}
+	fmt.Println(fmt.Sprintf("The new time of the branch is %d", eventTime))
+	branch.LastEventTime = eventTime
+	store.Branches[branchIndex] = branch
 }
 
 // Register TODO
@@ -291,15 +322,16 @@ type BranchStore interface {
 	SetBranchID(id ID)
 }
 
-func EventForBranch(branches map[ID]Branch, branch *Branch, event TimelineEvent) bool {
+func EventForBranch(store *TimelineStore, branch *Branch, event TimelineEvent) bool {
 	var recFunc func(branch *Branch, lastEventID ID) bool
 	recFunc = func(branch *Branch, lastEventID ID) bool {
 		if branch.BranchID != event.Branch() {
 			if branch.PrevBranch == ZeroID() {
 				return false
 			}
-			b, _ := branches[branch.PrevBranch]
-			return recFunc(&b, branch.PrevBranchLastEvent)
+			prevBranchIndex, _ := store.BranchDictionary[branch.PrevBranch]
+			prevBranch := store.Branches[prevBranchIndex]
+			return recFunc(&prevBranch, branch.PrevBranchLastEvent)
 		}
 		id1 := lastEventID[:]
 		eventID := event.ID()
