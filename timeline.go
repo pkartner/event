@@ -141,8 +141,8 @@ func (d* TimelineDispatcher) NewBranchHandler(e Event, s *Store) {
 		event, ok := e.(TimelineEvent)
 		if !ok {
 			return nil
-		}
-		if event.Branch() != branches[branchIndex].Branch.BranchID {
+		}	
+		if !EventForBranch(store, &newBranch, event) {
 			return nil
 		}
 		if event.ID() == branches[branchIndex].LastEvent {
@@ -153,6 +153,7 @@ func (d* TimelineDispatcher) NewBranchHandler(e Event, s *Store) {
 			return fmt.Errorf("No handler for event")
 		}
 		handler(event, &store.Stores[newBranch.StoreID])
+		store.Stores[newBranch.StoreID].LastEvent = e
 		return nil
 	})
 	if nil != err {
@@ -218,6 +219,7 @@ func (d* TimelineDispatcher) WindbackHandler(e Event, s *Store) {
 				continue
 			}
 			handler(event, &store.RewindStores[v.StoreID])
+			store.RewindStores[v.StoreID].LastEvent = e
 		}
 		return nil
 	})
