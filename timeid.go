@@ -11,8 +11,8 @@ func GenerateTimeID(time uint64, id uint64) ID {
 	firstPart := make([]byte, 8)
 	secondPart := make([]byte, 8)
 	
-	binary.LittleEndian.PutUint64(firstPart, time)
-	binary.LittleEndian.PutUint64(secondPart, id)
+	binary.BigEndian.PutUint64(firstPart, time)
+	binary.BigEndian.PutUint64(secondPart, id)
 	var total [16]byte 
 	copy(total[:], firstPart[:8])
 	copy(total[8:], secondPart[:8])
@@ -39,13 +39,13 @@ func IDFromString(str string) ID {
 
 func (id ID) IDPart() uint64 {
 	byteID := id.Byte()
-	idPart := binary.LittleEndian.Uint64(byteID[8:])
+	idPart := binary.BigEndian.Uint64(byteID[8:])
 	return idPart
 }
 
 func (id ID) TimePart() uint64 {
 	byteID := id.Byte()
-	idPart := binary.LittleEndian.Uint64(byteID[:8])
+	idPart := binary.BigEndian.Uint64(byteID[:8])
 	return idPart
 }
 

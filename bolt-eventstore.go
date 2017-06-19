@@ -84,9 +84,6 @@ func (s *BoltEventStore) Restore(time uint64, handleFunc ReadEventHandleFunc) er
             if event == nil {
                 panic(fmt.Errorf("event is nil"))
             }
-            if event.Time() > time {
-                continue;
-            }
             if err := handleFunc(event); nil != err {
                 return err
             } 
@@ -94,4 +91,30 @@ func (s *BoltEventStore) Restore(time uint64, handleFunc ReadEventHandleFunc) er
         return nil
     })
     return err
+}
+
+func (s *BoltEventStore) PrintAllEvents() {
+    s.db.View(func(tx *bolt.Tx) error {
+        b := tx.Bucket([]byte(EventBucket))
+        if b == nil {
+            return fmt.Errorf("bucket %q not found", EventBucket)
+        }
+        c := b.Cursor()
+
+        var event Event
+    
+        for k, v := c.First(); k != nil; k, v = c.Next() {
+            buffer := bytes.NewBuffer(v)
+            dec := gob.NewDecoder(buffer)
+            err := dec.Decode(&event)
+            if nil != err {
+                return err
+            }
+            if event == nil {
+                panic(fmt.Errorf("event is nil"))
+            }
+            fmt.Println(fmt.Sprintf("Event of type: %s, at time: %d, with id id part: %d", event.Type(), event.Time(), event.ID().IDPart()))
+        }
+        return nil
+    })
 }
